@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run build          # TypeScript check + esbuild bundle → dist/index.js
 npm run format         # Prettier format all .ts files
 npm run format-check   # Check formatting without writing
-npm run lint           # ESLint
+npm run lint           # ESLint (src/ only)
 npm test               # Vitest
 npm run test:coverage  # Vitest with coverage report
 ```
@@ -25,16 +25,15 @@ npm run test:coverage  # Vitest with coverage report
 - esbuild for bundling
 - vitest for testing (80% coverage threshold)
 - ESLint 9 flat config
-- `@actions/core`, `@octokit/rest`, `adm-zip`
+- `@actions/core`, `@octokit/rest`, `adm-zip`, `js-yaml`
 
 ## Architecture
 
 ### Pipeline
 
 ```
-Discover → Fetch → Parse → Filter → Download → Extract → Index
-(repo)     (releases) (metadata) (channel/  (zip)     (files)  (JSON/
-                                     stage)                       JSONL)
+Discover → Check Manifest → Fetch → Parse → Filter → Dedup → Download → Extract → Index → Delta Save
+(repo)     (channels.yml)   (ETag)  (meta)  (ch/st)  (hash)  (zip)     (files)  (JSON)  (state)
 ```
 
 Each stage is an interface with a default implementation. `main.ts` is the composition root — it constructs all dependencies and injects them into `AggregationPipeline`.
@@ -44,17 +43,25 @@ Each stage is an interface with a default implementation. `main.ts` is the compo
 ```
 src/
 ├── domain/          Types and interfaces
-│   └── types.ts     ReleaseMetadataJson, AggregatedDocument, IRepoDiscoverer, etc.
+│   └── types.ts     All domain types, pipeline interfaces (IRepoDiscoverer, IReleaseFetcher, etc.)
 ├── discovery/       Repo discovery strategies
 │   ├── topic-discoverer.ts      Search by GitHub topic across organizations
 │   └── explicit-discoverer.ts   Parse explicit owner/repo list
+├── fetching/        Release fetching with pagination + ETag
+│   └── release-fetcher.ts       PaginatedReleaseFetcher — fetches all pages, handles 304
+├── manifest/        Channel manifest reading
+│   └── manifest-reader.ts       GitHubManifestReader — reads .metanorma/channels.yml
 ├── filtering/       Release filtering
-│   ├── channel-filter.ts        Filter by channel (audience/category)
+│   ├── channel-filter.ts        Filter by channel (with overlaps() for manifest check)
 │   └── stage-filter.ts          Filter by publication stage
-├── processing/      Asset processing
-│   └── asset-processor.ts       Download zip, extract, canonicalize filenames
+├── caching/         Persistent cache (backed by actions/cache)
+│   └── cache-store.ts           FileCacheStore + NullCacheStore
+├── processing/      Asset processing with file routing
+│   └── asset-processor.ts       Extract zip, canonicalize filenames, route to subdirs
 ├── indexing/        Index generation
 │   └── index-generator.ts       JSON and JSONL document index
+├── delta/           Delta aggregation state
+│   └── state-manager.ts         DeltaStateManager — content-hash dedup, stale file cleanup
 ├── shared/          Utilities
 │   ├── logger.ts                PrefixLogger with scoped() for per-repo context
 │   └── concurrency.ts           mapWithConcurrency for bounded parallelism
@@ -66,10 +73,30 @@ src/
 ### Pipeline Interfaces
 
 - `IRepoDiscoverer` — discover repos (topic search or explicit list)
-- `ChannelFilter` — filter releases by configured channels
+- `IReleaseFetcher` — fetch all releases with pagination and ETag support
+- `IManifestReader` — read `.metanorma/channels.yml` for early repo filtering
+- `ICacheStore` — key-value cache for ETags and delta state
+- `ChannelFilter` — filter releases by configured channels (with `overlaps()` for manifest)
 - `StageFilter` — filter releases by configured stages
-- `AssetProcessor` — download, extract, and canonicalize zip contents
+- `AssetProcessor` — download, extract, canonicalize, and route zip contents
 - `IndexGenerator` — produce JSON/JSONL document index
+- `DeltaStateManager` — content-hash dedup, stale file cleanup, state persistence
+
+### Caching Architecture
+
+When `cache-dir` is set, the action uses a `FileCacheStore` (persisted via `actions/cache`) for:
+- **ETags**: Skip repos whose releases haven't changed (HTTP 304)
+- **Content hashes**: Skip re-downloading releases with unchanged content
+- **Delta state**: Track processed releases per repo, clean up stale files
+
+Null implementations (`NullCacheStore`, `NullManifestReader`, `NullDeltaManager`) are used when caching is disabled.
+
+### File Routing
+
+`AssetProcessor` supports three output structures via `file-routing` input:
+- `flat` (default): all files in `output-dir/`
+- `by-doctype`: `{output-dir}/{doctype}/` subdirectories
+- `by-format`: `{output-dir}/{ext}/` subdirectories
 
 ### Release Metadata Protocol
 
@@ -106,6 +133,12 @@ Strip edition suffixes using regex `/-ed\d+(\.\d+)?(-[a-z0-9]+)?\./`:
 }
 ```
 
+### Error Reporting
+
+- `aggregation-report` output includes per-release error details (`errors` array in `RepoReport`)
+- `failed-repos` output lists repos that had processing errors
+- `fail-on-error: true` fails the action when any repo has errors
+
 ## Conventions
 
 - Immutable value objects (readonly props, no setters)
@@ -115,3 +148,6 @@ Strip edition suffixes using regex `/-ed\d+(\.\d+)?(-[a-z0-9]+)?\./`:
 - Logger prefix: `[mn-aggregate]`
 - Content hash on first line of release body for change detection
 - Channels use hierarchical `audience/category` format (e.g., `public/standards`)
+- Test helper factories (`makeDeps`, `makeRelease`, `mockFetch`) for DRY test setup
+- `vi.fn()` for all mocks, `vi.clearAllMocks()` in `beforeEach`
+- Real temp directories in tests, cleaned up in `afterEach`

@@ -1,4 +1,4 @@
-import type { ReleaseMetadataJson } from "../domain/types.js";
+import type { ReleaseMetadataJson } from '../domain/types.js';
 
 export class ChannelFilter {
   constructor(private readonly channels: readonly string[] | undefined) {}
@@ -8,5 +8,10 @@ export class ChannelFilter {
     if (!metadata) return true; // legacy release — always include
     const releaseChannels = metadata.channels ?? [];
     return this.channels.some((c) => releaseChannels.includes(c));
+  }
+
+  overlaps(repoChannels: readonly string[]): boolean {
+    if (!this.channels || this.channels.length === 0) return true;
+    return repoChannels.some((c) => this.channels!.includes(c));
   }
 }

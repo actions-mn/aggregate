@@ -39,6 +39,10 @@ inputs:
     description: 'Document index format: json or jsonl'
     required: false
     default: 'json'
+  file-routing:
+    description: 'File output structure: flat (default), by-doctype, or by-format'
+    required: false
+    default: 'flat'
 
   # ── Processing ───────────────────────────────────────────────
   canonicalize:
@@ -50,11 +54,27 @@ inputs:
     required: false
     default: 'false'
 
+  # ── Error handling ───────────────────────────────────────────
+  fail-on-error:
+    description: 'Fail the action if any repo processing fails'
+    required: false
+    default: 'false'
+
   # ── Performance ──────────────────────────────────────────────
   concurrency:
     description: 'Max parallel repo processing (1 = sequential)'
     required: false
     default: '4'
+
+  # ── Caching ──────────────────────────────────────────────────
+  cache-dir:
+    description: 'Directory for persistent cache (ETags, content hashes, delta state). Set up with actions/cache. Empty = no caching.'
+    required: false
+    default: ''
+  force-full:
+    description: 'Force full aggregation, ignoring cached state'
+    required: false
+    default: 'false'
 
   # ── Authentication ───────────────────────────────────────────
   token:
@@ -72,7 +92,9 @@ outputs:
   channels-found:
     description: 'JSON array of all channels found across releases'
   aggregation-report:
-    description: 'JSON object with per-repo statistics'
+    description: 'JSON object with per-repo statistics and error details'
+  failed-repos:
+    description: 'JSON array of repos that had processing errors'
 
 runs:
   using: 'node24'

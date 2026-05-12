@@ -1,4 +1,4 @@
-import type { ReleaseMetadataJson } from "../domain/types.js";
+import type { ReleaseMetadataJson } from '../domain/types.js';
 
 export class StageFilter {
   constructor(private readonly stages: readonly string[] | undefined) {}
