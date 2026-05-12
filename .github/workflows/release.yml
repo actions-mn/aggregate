@@ -1,0 +1,22 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      next_version:
+        description: |
+          Next version. Values: x.y.z, major, minor, patch. Defaults to patch.
+        required: false
+        default: 'patch'
+  repository_dispatch:
+    types: [do-release]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    uses: actions-mn/shared/.github/workflows/release.yml@main
+    with:
+      next_version: ${{ github.event.inputs.next_version || github.event.client_payload.next_version || 'patch' }}

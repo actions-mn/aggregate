@@ -1,0 +1,79 @@
+name: 'metanorma-aggregate'
+description: 'Aggregate released Metanorma documents from GitHub repos with channel-based filtering'
+author: 'actions-mn'
+branding:
+  icon: 'download'
+  color: 'green'
+
+inputs:
+  # ── Discovery ────────────────────────────────────────────────
+  organizations:
+    description: 'Comma-separated GitHub organizations to scan'
+    required: false
+    default: ''
+  topic:
+    description: 'Repository topic for auto-discovery'
+    required: false
+    default: 'metanorma-release'
+  repos:
+    description: 'Explicit repo list (owner/repo, comma-separated). Skips topic discovery.'
+    required: false
+    default: ''
+
+  # ── Filtering ────────────────────────────────────────────────
+  channels:
+    description: 'Comma-separated channels to include. Empty = all channels.'
+    required: false
+    default: ''
+  stages:
+    description: 'Comma-separated stages to include. Empty = all stages.'
+    required: false
+    default: ''
+
+  # ── Output ───────────────────────────────────────────────────
+  output-dir:
+    description: 'Directory for extracted document files'
+    required: false
+    default: '_site/documents'
+  index-format:
+    description: 'Document index format: json or jsonl'
+    required: false
+    default: 'json'
+
+  # ── Processing ───────────────────────────────────────────────
+  canonicalize:
+    description: 'Strip edition suffixes from filenames (cc-51015-ed1.pdf → cc-51015.pdf)'
+    required: false
+    default: 'true'
+  include-drafts:
+    description: 'Include GitHub draft releases'
+    required: false
+    default: 'false'
+
+  # ── Performance ──────────────────────────────────────────────
+  concurrency:
+    description: 'Max parallel repo processing (1 = sequential)'
+    required: false
+    default: '4'
+
+  # ── Authentication ───────────────────────────────────────────
+  token:
+    description: 'GitHub token for API access (needs contents:read for repos)'
+    required: false
+    default: '${{ github.token }}'
+
+outputs:
+  document-count:
+    description: 'Number of documents aggregated'
+  index-path:
+    description: 'Path to the generated index file'
+  repo-count:
+    description: 'Number of repos scanned'
+  channels-found:
+    description: 'JSON array of all channels found across releases'
+  aggregation-report:
+    description: 'JSON object with per-repo statistics'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'

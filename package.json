@@ -1,0 +1,58 @@
+{
+  "name": "metanorma-aggregate",
+  "version": "0.0.0",
+  "description": "Aggregate released Metanorma documents from GitHub repos with channel-based filtering",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && esbuild src/main.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/index.js --minify --sourcemap",
+    "format": "prettier --write '**/*.ts'",
+    "format-check": "prettier --check '**/*.ts'",
+    "lint": "eslint src",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/actions-mn/aggregate.git"
+  },
+  "keywords": [
+    "github",
+    "actions",
+    "metanorma",
+    "aggregation"
+  ],
+  "author": "actions-mn",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/actions-mn/aggregate/issues"
+  },
+  "homepage": "https://github.com/actions-mn/aggregate#readme",
+  "dependencies": {
+    "@actions/core": "^3.0.0",
+    "@octokit/rest": "^21.0.0",
+    "adm-zip": "^0.5.17"
+  },
+  "devDependencies": {
+    "@eslint/compat": "^2.0.0",
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^24.x",
+    "@typescript-eslint/eslint-plugin": "^8.55.0",
+    "@typescript-eslint/parser": "^8.55.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.18.0",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-github": "^6.0.0",
+    "eslint-plugin-i18n-text": "^1.0.1",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-no-only-tests": "^3.3.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "globals": "^15.14.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
