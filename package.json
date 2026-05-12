@@ -1,6 +1,6 @@
 {
   "name": "metanorma-aggregate",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Aggregate released Metanorma documents from GitHub repos with channel-based filtering",
   "main": "dist/index.js",
   "engines": {
