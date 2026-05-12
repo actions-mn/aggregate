@@ -1,3 +1,5 @@
+import type { FileRoutingMode } from '../processing/asset-processor.js';
+
 // ─── Discovery ──────────────────────────────────────────────────────────────
 
 export interface RepoRef {
@@ -56,11 +58,17 @@ export interface AggregatedDocument {
 
 // ─── Repo-level report ──────────────────────────────────────────────────────
 
+export interface RepoError {
+  readonly tag: string;
+  readonly message: string;
+}
+
 export interface RepoReport {
   readonly releases: number;
   readonly included: number;
   readonly skipped: number;
   readonly reason: string;
+  readonly errors?: readonly RepoError[];
 }
 
 // ─── Aggregation result ─────────────────────────────────────────────────────
@@ -70,6 +78,7 @@ export interface AggregationResult {
   readonly repoCount: number;
   readonly channelsFound: readonly string[];
   readonly report: Readonly<Record<string, RepoReport>>;
+  readonly failedRepos: readonly string[];
 }
 
 // ─── Index output ───────────────────────────────────────────────────────────
@@ -91,6 +100,49 @@ export interface DocumentIndex {
     readonly channelsFound: readonly string[];
   };
   readonly documents: readonly AggregatedDocument[];
+}
+
+// ─── Release fetching ───────────────────────────────────────────────────────
+
+export interface FetchResult {
+  readonly releases: readonly GitHubRelease[];
+  readonly etag: string | null;
+  readonly unchanged: boolean;
+}
+
+export interface IReleaseFetcher {
+  fetch(repo: RepoRef, etag?: string | null): Promise<FetchResult>;
+}
+
+// ─── Channel manifest ───────────────────────────────────────────────────────
+
+export interface IManifestReader {
+  read(repo: RepoRef): Promise<readonly string[] | null>;
+}
+
+// ─── Caching ────────────────────────────────────────────────────────────────
+
+export interface ICacheStore {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
+// ─── Delta aggregation state ────────────────────────────────────────────────
+
+export interface ReleaseState {
+  readonly contentHash: string | null;
+  readonly files: readonly string[];
+}
+
+export interface RepoState {
+  etag: string | null;
+  releases: Record<string, ReleaseState>;
+}
+
+export interface AggregationState {
+  lastRun: string;
+  repos: Record<string, RepoState>;
 }
 
 // ─── GitHub API protocol ────────────────────────────────────────────────────
@@ -125,7 +177,6 @@ export interface GitHubAggregationApi {
     repos(params: {
       q: string;
       per_page: number;
-      page?: number;
     }): Promise<{ data: GitHubSearchResult }>;
   };
   repos: {
@@ -134,14 +185,36 @@ export interface GitHubAggregationApi {
       repo: string;
       per_page: number;
       page?: number;
-    }): Promise<{ data: GitHubRelease[] }>;
+      headers?: Record<string, string>;
+    }): Promise<{
+      status: number;
+      data: GitHubRelease[];
+      headers: Record<string, string>;
+    }>;
+    getContent(params: {
+      owner: string;
+      repo: string;
+      path: string;
+    }): Promise<{ data: { content: string } }>;
   };
+}
+
+// ─── Pipeline config ────────────────────────────────────────────────────────
+
+export interface PipelineConfig {
+  readonly organizations: readonly string[];
+  readonly channels: readonly string[];
+  readonly topic: string;
+  readonly concurrency: number;
+  readonly includeDrafts: boolean;
+  readonly failOnError: boolean;
+  readonly fileRouting: FileRoutingMode;
 }
 
 // ─── Release metadata parsing ───────────────────────────────────────────────
 
 export function parseReleaseMetadata(
-  body: string | null | undefined,
+  body: string | null | undefined
 ): ReleaseMetadataJson | null {
   if (!body) return null;
   const match = body.match(/<!-- mn-release-metadata\n([\s\S]*?)\n-->/);
@@ -154,7 +227,7 @@ export function parseReleaseMetadata(
 }
 
 export function extractContentHash(
-  body: string | null | undefined,
+  body: string | null | undefined
 ): string | null {
   if (!body) return null;
   const match = body.match(/^content-hash:([a-f0-9]+)/m);

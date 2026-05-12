@@ -1,5 +1,5 @@
 export class PrefixLogger {
-  constructor(private readonly prefix: string = "mn-aggregate") {}
+  constructor(private readonly prefix: string = 'mn-aggregate') {}
 
   info(message: string): void {
     console.log(`[${this.prefix}] ${message}`);

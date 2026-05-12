@@ -17,6 +17,24 @@ Part of the [actions-mn](https://github.com/actions-mn) ecosystem. Consumes rele
     token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### With caching (recommended)
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: .cache/mn-aggregate
+    key: mn-aggregate-${{ github.run_id }}
+    restore-keys: mn-aggregate-
+
+- uses: actions-mn/aggregate@v1
+  with:
+    organizations: CalConnect
+    channels: 'public/standards'
+    output-dir: _site/cc
+    cache-dir: .cache/mn-aggregate
+    token: ${{ secrets.GITHUB_TOKEN }}
+```
+
 ## Inputs
 
 | Input | Description | Default |
@@ -28,9 +46,13 @@ Part of the [actions-mn](https://github.com/actions-mn) ecosystem. Consumes rele
 | `stages` | Comma-separated stages to include. Empty = all. | `''` |
 | `output-dir` | Directory for extracted document files | `_site/documents` |
 | `index-format` | Index format: `json` or `jsonl` | `json` |
+| `file-routing` | File output structure: `flat`, `by-doctype`, or `by-format` | `flat` |
 | `canonicalize` | Strip edition suffixes from filenames | `true` |
 | `include-drafts` | Include GitHub draft releases | `false` |
+| `fail-on-error` | Fail the action if any repo processing fails | `false` |
 | `concurrency` | Max parallel repo processing | `4` |
+| `cache-dir` | Directory for persistent cache (ETags, content hashes, delta state). Empty = no caching. | `''` |
+| `force-full` | Force full aggregation, ignoring cached state | `false` |
 | `token` | GitHub token for API access | `${{ github.token }}` |
 
 ## Outputs
@@ -41,16 +63,21 @@ Part of the [actions-mn](https://github.com/actions-mn) ecosystem. Consumes rele
 | `index-path` | Path to the generated index file |
 | `repo-count` | Number of repos scanned |
 | `channels-found` | JSON array of all channels found |
-| `aggregation-report` | JSON object with per-repo statistics |
+| `aggregation-report` | JSON object with per-repo statistics and error details |
+| `failed-repos` | JSON array of repos that had processing errors |
 
 ## How it works
 
 1. **Discover** — Finds repos by GitHub topic or from an explicit list
-2. **Fetch** — Lists releases from each repo via GitHub API
-3. **Parse** — Extracts `mn-release-metadata` JSON from release bodies
-4. **Filter** — Includes releases matching configured channels and stages
-5. **Download** — Downloads zip assets, extracts, and canonicalizes filenames
-6. **Index** — Generates a structured JSON document index
+2. **Check manifest** — Reads `.metanorma/channels.yml` to skip repos with no matching channels
+3. **Fetch** — Lists all releases with pagination; sends ETag to skip unchanged repos
+4. **Parse** — Extracts `mn-release-metadata` JSON from release bodies
+5. **Filter** — Includes releases matching configured channels and stages
+6. **Dedup** — Skips releases with unchanged content hashes
+7. **Download** — Downloads zip assets, extracts, and canonicalizes filenames
+8. **Route** — Organizes files by flat/by-doctype/by-format structure
+9. **Index** — Generates a structured JSON document index
+10. **Delta save** — Persists state for incremental runs
 
 ## Index format
 
@@ -78,14 +105,21 @@ The action writes `index.json` (or `index.jsonl`) to the output directory:
     output-dir: _site/guides
 ```
 
-### Multi-org
+### Multi-org with caching
 
 ```yaml
+- uses: actions/cache@v4
+  with:
+    path: .cache/mn-aggregate
+    key: mn-aggregate-${{ github.run_id }}
+    restore-keys: mn-aggregate-
+
 - uses: actions-mn/aggregate@v1
   with:
     organizations: 'OrgA,OrgB'
     channels: 'public/standards'
     output-dir: _site/docs
+    cache-dir: .cache/mn-aggregate
     token: ${{ secrets.PAT_TOKEN }}
 ```
 
@@ -100,6 +134,17 @@ The action writes `index.json` (or `index.jsonl`) to the output directory:
     output-dir: _site/drafts
     include-drafts: true
     token: ${{ secrets.MEMBER_TOKEN }}
+```
+
+### Structured output by document type
+
+```yaml
+- uses: actions-mn/aggregate@v1
+  with:
+    organizations: CalConnect
+    channels: 'public/standards'
+    output-dir: _site/cc
+    file-routing: by-doctype
 ```
 
 ## Backward compatibility
