@@ -1,0 +1,5 @@
+# metanorma.release.yml — CalConnect Directive: Standardization and Publication
+
+documents:
+  - source: sources/cc-10001.adoc
+    channels: [public/directives]

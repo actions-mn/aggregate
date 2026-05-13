@@ -1,0 +1,95 @@
+# Example portal workflow for standards.calconnect.org
+#
+# Uses actions-mn/aggregate to collect released documents instead of
+# building from source submodules.
+
+name: build_deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Restore aggregation cache (ETags, content hashes, delta state)
+      - uses: actions/cache@v4
+        with:
+          path: .cache/mn-aggregate
+          key: mn-aggregate-${{ github.run_id }}
+          restore-keys: mn-aggregate-
+
+      # Aggregate all public documents from CalConnect release repos
+      - uses: actions-mn/aggregate@v0
+        id: aggregate
+        with:
+          organizations: CalConnect
+          topic: metanorma-release
+          channels: 'public/standards,public/reports,public/admin,public/advisories,public/directives'
+          output-dir: _site/cc
+          canonicalize: true
+          cache-dir: .cache/mn-aggregate
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build Relaton index from extracted RXL files
+      - name: Build Relaton index
+        uses: addnab/docker-run-action@v3
+        with:
+          image: metanorma/metanorma:latest
+          options: -v ${{ github.workspace }}:/metanorma -w /metanorma
+          run: |
+            mkdir -p relaton/rxl relaton/yaml
+            find _site/cc/ -name "*.rxl" -exec cp {} relaton/rxl/ \;
+            for f in relaton/rxl/*.rxl; do
+              relaton convert "$f" -f yaml -o "${f%.rxl}.yaml"
+              mv "${f%.rxl}.yaml" relaton/yaml/
+            done
+            relaton concatenate -t "CalConnect Document Registry" -g "CalConnect" -x yaml relaton/yaml relaton/yaml/index.yaml
+            relaton concatenate -t "CalConnect Document Registry" -g "CalConnect" -x rxl relaton/rxl relaton/rxl/index.rxl
+            cp -a relaton/ _site/relaton/
+
+      # Build Relaton CSS
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:relaton
+
+      # Build Jekyll site (reads _site/cc/ + _site/relaton/)
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          ruby-version: 3.3
+      - run: bundle exec jekyll build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site/
+
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

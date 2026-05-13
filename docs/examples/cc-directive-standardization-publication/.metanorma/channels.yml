@@ -1,0 +1,5 @@
+# .metanorma/channels.yml — CalConnect Directives
+
+channels:
+  - name: public/directives
+    description: "CalConnect directives (governance, policies)"

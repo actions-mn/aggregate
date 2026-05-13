@@ -1,0 +1,5 @@
+# metanorma.release.yml — CalConnect Directive: Document Requirements
+
+documents:
+  - source: sources/cc-10002.adoc
+    channels: [public/directives]
